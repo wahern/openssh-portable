@@ -47,6 +47,9 @@ sshkey_file_tests(void)
 	struct sshbuf *buf, *pw;
 #ifdef WITH_OPENSSL
 	BIGNUM *a, *b, *c;
+#ifdef OPENSSL_HAS_ECC
+	const EC_KEY *ec = NULL;
+#endif
 #endif
 	char *cp;
 
@@ -271,11 +274,12 @@ sshkey_file_tests(void)
 #ifndef OPENSSL_IS_BORINGSSL /* lacks EC_POINT_point2bn() */
 	a = load_bignum("ecdsa_1.param.priv");
 	b = load_bignum("ecdsa_1.param.pub");
-	c = EC_POINT_point2bn(EC_KEY_get0_group(k1->ecdsa),
-	    EC_KEY_get0_public_key(k1->ecdsa), POINT_CONVERSION_UNCOMPRESSED,
+	ec = EVP_PKEY_get0_EC_KEY(k1->pkey);
+	c = EC_POINT_point2bn(EC_KEY_get0_group(ec),
+	EC_KEY_get0_public_key(ec), POINT_CONVERSION_UNCOMPRESSED,
 	    NULL, NULL);
 	ASSERT_PTR_NE(c, NULL);
-	ASSERT_BIGNUM_EQ(EC_KEY_get0_private_key(k1->ecdsa), a);
+	ASSERT_BIGNUM_EQ(EC_KEY_get0_private_key(ec), a);
 	ASSERT_BIGNUM_EQ(b, c);
 	BN_free(a);
 	BN_free(b);

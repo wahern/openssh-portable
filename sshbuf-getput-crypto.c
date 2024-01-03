@@ -27,6 +27,7 @@
 #include <openssl/bn.h>
 #ifdef OPENSSL_HAS_ECC
 # include <openssl/ec.h>
+# include <openssl/evp.h>
 #endif /* OPENSSL_HAS_ECC */
 
 #include "ssherr.h"
@@ -123,7 +124,7 @@ sshbuf_get_eckey(struct sshbuf *buf, EC_KEY *v)
 		SSHBUF_ABORT();
 		return SSH_ERR_INTERNAL_ERROR;
 	}
-	return 0;	
+	return 0;
 }
 #endif /* OPENSSL_HAS_ECC */
 
@@ -151,7 +152,7 @@ sshbuf_put_bignum2(struct sshbuf *buf, const BIGNUM *v)
 
 #ifdef OPENSSL_HAS_ECC
 int
-sshbuf_put_ec(struct sshbuf *buf, const EC_POINT *v, const EC_GROUP *g)
+sshbuf_put_ecbuf(struct sshbuf *buf, const EC_POINT *v, const EC_GROUP *g)
 {
 	u_char d[SSHBUF_MAX_ECPOINT];
 	size_t len;
@@ -171,10 +172,15 @@ sshbuf_put_ec(struct sshbuf *buf, const EC_POINT *v, const EC_GROUP *g)
 }
 
 int
-sshbuf_put_eckey(struct sshbuf *buf, const EC_KEY *v)
+sshbuf_put_ec(struct sshbuf *buf, EVP_PKEY *pkey)
 {
-	return sshbuf_put_ec(buf, EC_KEY_get0_public_key(v),
-	    EC_KEY_get0_group(v));
+	const EC_KEY *ec = EVP_PKEY_get0_EC_KEY(pkey);
+
+	if (ec == NULL)
+		return SSH_ERR_LIBCRYPTO_ERROR;
+
+	return sshbuf_put_ecbuf(buf, EC_KEY_get0_public_key(ec),
+	    EC_KEY_get0_group(ec));
 }
 #endif /* OPENSSL_HAS_ECC */
 #endif /* WITH_OPENSSL */

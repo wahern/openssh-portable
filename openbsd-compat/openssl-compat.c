@@ -95,4 +95,14 @@ ssh_libcrypto_init(void)
 #endif /* USE_OPENSSL_ENGINE */
 }
 
+#ifndef HAVE_EVP_PKEY_SET1_DH
+int
+EVP_PKEY_set1_DH(EVP_PKEY *pkey, DH *key)
+{
+	(void)pkey;
+	(void)key;
+	return 0;
+}
+#endif /* HAVE_EVP_PKEY_SET1_DH */
+
 #endif /* WITH_OPENSSL */

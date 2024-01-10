@@ -78,5 +78,9 @@ int EVP_CIPHER_CTX_set_iv(EVP_CIPHER_CTX *ctx,
     const unsigned char *iv, size_t len);
 #endif /* HAVE_EVP_CIPHER_CTX_SET_IV */
 
+#ifndef HAVE_EVP_PKEY_SET1_DH
+int EVP_PKEY_set1_DH(EVP_PKEY *pkey, DH *key);
+#endif /* HAVE_EVP_PKEY_SET1_DH */
+
 #endif /* WITH_OPENSSL */
 #endif /* _OPENSSL_COMPAT_H */

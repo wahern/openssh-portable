@@ -2955,6 +2955,7 @@ if test "x$openssl" = "xyes" ; then
 		EVP_MD_CTX_cleanup \
 		EVP_MD_CTX_copy_ex \
 		EVP_MD_CTX_init \
+		EVP_PKEY_set1_DH \
 		HMAC_CTX_init \
 		RSA_generate_key_ex \
 		RSA_get_default_method \

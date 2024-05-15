@@ -283,7 +283,7 @@ ssh_dss_sign(struct sshkey *key,
 
 	if ((ret = ssh_create_evp_dss(key, &pkey)) != 0)
 		return ret;
-	ret = sshkey_calculate_signature(pkey, SSH_DIGEST_SHA1, &sigb, &len,
+	ret = sshkey_pkey_digest_sign(pkey, SSH_DIGEST_SHA1, &sigb, &len,
 	    data, datalen);
 	EVP_PKEY_free(pkey);
 	if (ret < 0) {
@@ -412,7 +412,7 @@ ssh_dss_verify(const struct sshkey *key,
 
 	if ((ret = ssh_create_evp_dss(key, &pkey)) != 0)
 		goto out;
-	ret = sshkey_verify_signature(pkey, SSH_DIGEST_SHA1, data, dlen,
+	ret = sshkey_pkey_digest_verify(pkey, SSH_DIGEST_SHA1, data, dlen,
 	    sigb, slen);
 	EVP_PKEY_free(pkey);
 

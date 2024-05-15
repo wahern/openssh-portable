@@ -481,8 +481,24 @@ sshkey_type_certified(int type)
 }
 
 #ifdef WITH_OPENSSL
+static const EVP_MD *
+ssh_digest_to_md(int digest_type)
+{
+	switch (digest_type) {
+	case SSH_DIGEST_SHA1:
+		return EVP_sha1();
+	case SSH_DIGEST_SHA256:
+		return EVP_sha256();
+	case SSH_DIGEST_SHA384:
+		return EVP_sha384();
+	case SSH_DIGEST_SHA512:
+		return EVP_sha512();
+	}
+	return NULL;
+}
+
 int
-sshkey_calculate_signature(EVP_PKEY *pkey, int hash_alg, u_char **sigp,
+sshkey_pkey_digest_sign(EVP_PKEY *pkey, int hash_alg, u_char **sigp,
     int *lenp, const u_char *data, size_t datalen)
 {
 	EVP_MD_CTX *ctx = NULL;
@@ -490,23 +506,21 @@ sshkey_calculate_signature(EVP_PKEY *pkey, int hash_alg, u_char **sigp,
 	int ret, slen;
 	size_t len;
 
-	if (sigp == NULL || lenp == NULL) {
-		return SSH_ERR_INVALID_ARGUMENT;
-	}
+	*sigp = NULL;
+	*lenp = 0;
 
 	slen = EVP_PKEY_size(pkey);
 	if (slen <= 0 || slen > SSHBUF_MAX_BIGNUM)
 		return SSH_ERR_INVALID_ARGUMENT;
 
-	len = slen;
-	if ((sig = malloc(slen)) == NULL) {
+	if ((sig = malloc(slen)) == NULL)
 		return SSH_ERR_ALLOC_FAIL;
-	}
 
 	if ((ctx = EVP_MD_CTX_new()) == NULL) {
 		ret = SSH_ERR_ALLOC_FAIL;
 		goto error;
 	}
+	len = slen;
 	if (EVP_DigestSignInit(ctx, NULL, ssh_digest_to_md(hash_alg),
 	        NULL, pkey) != 1 ||
 	    EVP_DigestSignUpdate(ctx, data, datalen) != 1 ||
@@ -528,15 +542,14 @@ error:
 }
 
 int
-sshkey_verify_signature(EVP_PKEY *pkey, int hash_alg, const u_char *data,
+sshkey_pkey_digest_verify(EVP_PKEY *pkey, int hash_alg, const u_char *data,
     size_t datalen, u_char *sigbuf, int siglen)
 {
 	EVP_MD_CTX *ctx = NULL;
-	int ret;
+	int ret = SSH_ERR_INTERNAL_ERROR;
 
-	if ((ctx = EVP_MD_CTX_new()) == NULL) {
+	if ((ctx = EVP_MD_CTX_new()) == NULL)
 		return SSH_ERR_ALLOC_FAIL;
-	}
 	if (EVP_DigestVerifyInit(ctx, NULL, ssh_digest_to_md(hash_alg),
 	    NULL, pkey) != 1 ||
 	    EVP_DigestVerifyUpdate(ctx, data, datalen) != 1) {
@@ -1474,11 +1487,10 @@ int
 sshkey_ecdsa_key_to_nid(EVP_PKEY *pkey)
 {
 	int nid;
-	EC_KEY *ec = EVP_PKEY_get1_EC_KEY(pkey);
+	EC_KEY *ec;
 
-	if (ec == NULL)
+	if ((ec = EVP_PKEY_get1_EC_KEY(pkey)) == NULL)
 		return -1;
-
 	nid = sshkey_ec_key_to_nid(ec);
 	EC_KEY_free(ec);
 	return nid;
@@ -2684,6 +2696,8 @@ sshkey_ec_validate_public(const EC_GROUP *group, const EC_POINT *public)
 	BIGNUM *order = NULL, *x = NULL, *y = NULL, *tmp = NULL;
 	int ret = SSH_ERR_KEY_INVALID_EC_VALUE;
 
+	/* XXX replace with EC_KEY_check_key or similar? */
+
 	/*
 	 * NB. This assumes OpenSSL has already verified that the public
 	 * point lies on the curve. This is done by EC_POINT_oct2point()
@@ -2790,6 +2804,8 @@ void
 sshkey_dump_ec_point(const EC_GROUP *group, const EC_POINT *point)
 {
 	BIGNUM *x = NULL, *y = NULL;
+
+	/* XXX maybe replace with pkey EVP_PKEY_print_public_fp() */
 
 	if (point == NULL) {
 		fputs("point=(NULL)\n", stderr);
@@ -3528,6 +3544,7 @@ sshkey_parse_private_pem_fileblob(struct sshbuf *blob, int type,
 	struct sshkey *prv = NULL;
 	BIO *bio = NULL;
 	int r;
+	RSA *rsa = NULL;
 
 	if (keyp != NULL)
 		*keyp = NULL;
@@ -3557,8 +3574,6 @@ sshkey_parse_private_pem_fileblob(struct sshbuf *blob, int type,
 	}
 	if (EVP_PKEY_base_id(pk) == EVP_PKEY_RSA &&
 	    (type == KEY_UNSPEC || type == KEY_RSA)) {
-		RSA *rsa = NULL;
-
 		if ((prv = sshkey_new(KEY_UNSPEC)) == NULL) {
 			r = SSH_ERR_ALLOC_FAIL;
 			goto out;
@@ -3566,17 +3581,18 @@ sshkey_parse_private_pem_fileblob(struct sshbuf *blob, int type,
 		prv->pkey = pk;
 		pk = NULL;
 		prv->type = KEY_RSA;
-		rsa = EVP_PKEY_get1_RSA(prv->pkey);
-#ifdef DEBUG_PK
-		RSA_print_fp(stderr, rsa, 8);
-#endif
-		if (RSA_blinding_on(rsa, NULL) != 1) {
-			RSA_free(rsa);
+		if ((rsa = EVP_PKEY_get1_RSA(prv->pkey)) == NULL) {
 			r = SSH_ERR_LIBCRYPTO_ERROR;
 			goto out;
 		}
-		EVP_PKEY_set1_RSA(prv->pkey, rsa);
-		RSA_free(rsa);
+#ifdef DEBUG_PK
+		RSA_print_fp(stderr, rsa, 8);
+#endif
+		if (RSA_blinding_on(rsa, NULL) != 1 ||
+		    !EVP_PKEY_set1_RSA(prv->pkey, rsa)) {
+			r = SSH_ERR_LIBCRYPTO_ERROR;
+			goto out;
+		}
 		if ((r = sshkey_check_rsa_length(prv, 0)) != 0)
 			goto out;
 #ifdef WITH_DSA
@@ -3671,6 +3687,7 @@ sshkey_parse_private_pem_fileblob(struct sshbuf *blob, int type,
 		prv = NULL;
 	}
  out:
+	RSA_free(rsa);
 	BIO_free(bio);
 	EVP_PKEY_free(pk);
 	sshkey_free(prv);

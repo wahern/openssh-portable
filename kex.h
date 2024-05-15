@@ -32,7 +32,6 @@
 #ifdef WITH_OPENSSL
 # include <openssl/bn.h>
 # include <openssl/dh.h>
-# include <openssl/ecdsa.h>
 # include <openssl/evp.h>
 #else /* WITH_OPENSSL */
 # define DH		void
@@ -165,7 +164,6 @@ struct kex {
 	    u_char **, size_t *, const u_char *, size_t, const char *);
 	int	(*kex[KEX_MAX])(struct ssh *);
 	/* kex specific state */
-	DH	*dh;			/* DH */
 	u_int	min, max, nbits;	/* GEX */
 	EVP_PKEY *pkey;			/* ECDH */
 	u_char c25519_client_key[CURVE25519_SIZE]; /* 25519 + KEM */

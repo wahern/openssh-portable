@@ -49,7 +49,7 @@ kex_ecdh_dec_key_group(struct kex *kex, const struct sshbuf *ec_blob,
     EVP_PKEY *pkey, struct sshbuf **shared_secretp);
 
 static EVP_PKEY *
-generate_ec_keys(int ec_nid)
+kex_ecdh_generate(int ec_nid)
 {
 	EVP_PKEY *pkey = NULL;
 	EVP_PKEY_CTX *ctx = NULL;
@@ -73,7 +73,7 @@ kex_ecdh_keypair(struct kex *kex)
 	struct sshbuf *buf = NULL;
 	int r;
 
-	if ((client_key = generate_ec_keys(kex->ec_nid)) == NULL) {
+	if ((client_key = kex_ecdh_generate(kex->ec_nid)) == NULL) {
 		r = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
@@ -110,7 +110,7 @@ kex_ecdh_enc(struct kex *kex, const struct sshbuf *client_blob,
 	*server_blobp = NULL;
 	*shared_secretp = NULL;
 
-	if ((server_key = generate_ec_keys(kex->ec_nid)) == NULL) {
+	if ((server_key = kex_ecdh_generate(kex->ec_nid)) == NULL) {
 		r = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
@@ -177,14 +177,9 @@ kex_ecdh_dec_key_group(struct kex *kex, const struct sshbuf *ec_blob,
 
 #ifdef DEBUG_KEXECDH
 	fputs("public key:\n", stderr);
-// wahern: TODO
-//	EVP_PKEY_print_public_fp(stderr, peer_key, 0, NULL);
 	sshkey_dump_ec_point(EC_KEY_get0_group(ec),
 	    EC_KEY_get0_public_key(ec));
 #endif
-// wahern: TODO use EVP_PKEY_public_check instead? original patch simply
-// removed sshkey_ec_validate_public call in 1.1.1 case, but did call
-// EVP_PKEY_public_check in 3.x case
 	if (sshkey_ec_validate_public(EC_KEY_get0_group(ec),
 	    EC_KEY_get0_public_key(ec)) != 0) {
 		r = SSH_ERR_MESSAGE_INCOMPLETE;

@@ -56,7 +56,6 @@
 #include "ssh.h"
 #include "ssh2.h"
 #include "ssherr.h"
-#include "ssh-pkcs11.h"
 #include "atomicio.h"
 #include "krl.h"
 #include "digest.h"
@@ -66,6 +65,10 @@
 #include "ssh-sk.h"
 #include "sk-api.h" /* XXX for SSH_SK_USER_PRESENCE_REQD; remove */
 #include "cipher.h"
+
+#ifdef ENABLE_PKCS11
+#include "ssh-pkcs11.h"
+#endif
 
 #define DEFAULT_KEY_TYPE_NAME "ed25519"
 
@@ -607,14 +610,6 @@ do_convert_private_ssh2(struct sshbuf *b)
 		if (EVP_PKEY_set1_RSA(key->pkey, rsa) != 1)
 			fatal_f("EVP_PKEY_set1_RSA failed");
 		RSA_free(rsa);
-		BN_clear_free(rsa_n);
-		BN_clear_free(rsa_e);
-		BN_clear_free(rsa_d);
-		BN_clear_free(rsa_p);
-		BN_clear_free(rsa_q);
-		BN_clear_free(rsa_dmp1);
-		BN_clear_free(rsa_dmq1);
-		BN_clear_free(rsa_iqmp);
 		alg = "rsa-sha2-256";
 		break;
 	}

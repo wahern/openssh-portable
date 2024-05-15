@@ -241,7 +241,7 @@ ssh_ecdsa_sk_verify(const struct sshkey *key,
 	u_char sig_flags;
 	u_char msghash[32], apphash[32];
 	u_int sig_counter;
-	u_char *sigb = NULL, *psig = NULL;
+	u_char *sigb = NULL;
 	int is_webauthn = 0, ret = SSH_ERR_INTERNAL_ERROR, len;
 	struct sshbuf *b = NULL, *sigbuf = NULL, *original_signed = NULL;
 	struct sshbuf *webauthn_wrapper = NULL, *webauthn_exts = NULL;
@@ -371,27 +371,24 @@ ssh_ecdsa_sk_verify(const struct sshkey *key,
 	sshbuf_dump(original_signed, stderr);
 #endif
 
-	/* Verify it */
-	if ((len = i2d_ECDSA_SIG(esig, NULL)) == 0) {
-		ret = SSH_ERR_LIBCRYPTO_ERROR;
-		goto out;
-	}
-	if ((sigb = malloc(len)) == NULL ||
-	    (md_ctx = EVP_MD_CTX_new()) == NULL) {
+	if ((md_ctx = EVP_MD_CTX_new()) == NULL) {
 		ret = SSH_ERR_ALLOC_FAIL;
 		goto out;
 	}
-	psig = sigb;
-	if ((len = i2d_ECDSA_SIG(esig, &psig)) == 0) {
+
+	sigb = NULL;
+	if ((len = i2d_ECDSA_SIG(esig, &sigb)) <= 0) {
 		ret = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
+	/* Verify it */
 	if (EVP_DigestVerifyInit(md_ctx, NULL, EVP_sha256(), NULL,
 	    key->pkey) != 1) {
 		ret = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
-	switch(EVP_DigestVerify(md_ctx, sigb, len, sshbuf_ptr(original_signed), sshbuf_len(original_signed))) {
+	switch (EVP_DigestVerify(md_ctx, sigb, len,
+	    sshbuf_ptr(original_signed), sshbuf_len(original_signed))) {
 	case 1:
 		ret = 0;
 		break;
@@ -423,7 +420,7 @@ ssh_ecdsa_sk_verify(const struct sshkey *key,
 	BN_clear_free(sig_r);
 	BN_clear_free(sig_s);
 	free(ktype);
-	free(sigb);
+	OPENSSL_free(sigb); /* NB. must use OPENSSL_free() for BoringSSL */
 	EVP_MD_CTX_free(md_ctx);
 	return ret;
 }

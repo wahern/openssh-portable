@@ -264,22 +264,13 @@ rsa_encrypt(int flen, const u_char *from, u_char *to, RSA *rsa, int padding)
 	debug3_f("signing with PKCS11 provider %s", helper->path);
 	if (padding != RSA_PKCS1_PADDING)
 		goto fail;
-	key = sshkey_new(KEY_UNSPEC);
-	if (key == NULL) {
+	if ((key = sshkey_new(KEY_UNSPEC)) == NULL) {
 		error_f("sshkey_new failed");
 		goto fail;
 	}
-	key->pkey = EVP_PKEY_new();
-	if (key->pkey == NULL) {
-		error("EVP_PKEY_new failed");
-		sshkey_free(key);
-		key = NULL;
-		goto fail;
-	}
-	if (EVP_PKEY_set1_RSA(key->pkey, rsa) <= 0) {
-		error("EVP_PKEY_set1_RSA failed");
-		sshkey_free(key);
-		key = NULL;
+	if ((key->pkey = EVP_PKEY_new()) == NULL ||
+	   EVP_PKEY_set1_RSA(key->pkey, rsa) <= 0) {
+		error_f("pkey setup failed");
 		goto fail;
 	}
 
@@ -352,31 +343,19 @@ ecdsa_do_sign(const unsigned char *dgst, int dgst_len, const BIGNUM *inv,
 		fatal_f("no helper for PKCS11 key");
 	debug3_f("signing with PKCS11 provider %s", helper->path);
 
-	key = sshkey_new(KEY_UNSPEC);
-	if (key == NULL) {
+	if ((key = sshkey_new(KEY_UNSPEC)) == NULL) {
 		error_f("sshkey_new failed");
 		goto fail;
 	}
-	key->pkey = EVP_PKEY_new();
-	if (key->pkey == NULL) {
-		error("EVP_PKEY_new failed");
-		sshkey_free(key);
-		key = NULL;
-		goto fail;
-	}
-
-	if (EVP_PKEY_set1_EC_KEY(key->pkey, ec) <= 0) {
-		error("EVP_PKEY_set1_EC_KEY failed");
-		sshkey_free(key);
-		key = NULL;
+	if ((key->pkey = EVP_PKEY_new()) == NULL ||
+	    EVP_PKEY_set1_EC_KEY(key->pkey, ec) <= 0) {
+		error("pkey setup failed");
 		goto fail;
 	}
 
 	nid = sshkey_ecdsa_key_to_nid(key->pkey);
 	if (nid < 0) {
 		error("couldn't get curve nid");
-		sshkey_free(key);
-		key = NULL;
 		goto fail;
 	}
 
@@ -438,7 +417,10 @@ wrap_key(struct helper *helper, struct sshkey *k)
 {
 	debug3_f("wrap %s for provider %s", sshkey_type(k), helper->path);
 	if (k->type == KEY_RSA) {
-		RSA *rsa = EVP_PKEY_get1_RSA(k->pkey);
+		RSA *rsa = NULL;
+
+		if ((rsa = EVP_PKEY_get1_RSA(k->pkey)) == NULL)
+			fatal_f("no RSA key");
 		RSA_set_method(rsa, helper->rsa_meth);
 		if (helper->nrsa++ >= INT_MAX)
 			fatal_f("RSA refcount error");
@@ -446,7 +428,10 @@ wrap_key(struct helper *helper, struct sshkey *k)
 		RSA_free(rsa);
 #if defined(OPENSSL_HAS_ECC) && defined(HAVE_EC_KEY_METHOD_NEW)
 	} else if (k->type == KEY_ECDSA) {
-		EC_KEY *ecdsa = EVP_PKEY_get1_EC_KEY(k->pkey);
+		EC_KEY *ecdsa = NULL;
+
+		if ((ecdsa = EVP_PKEY_get1_EC_KEY(k->pkey)) == NULL)
+			fatal_f("no ECDSA key");
 		EC_KEY_set_method(ecdsa, helper->ec_meth);
 		if (helper->nec++ >= INT_MAX)
 			fatal_f("EC refcount error");
@@ -482,31 +467,44 @@ pkcs11_make_cert(const struct sshkey *priv,
 		return SSH_ERR_INVALID_ARGUMENT;
 	}
 	*certprivp = NULL;
+	/* XXX possible easier with EVP_PKEY_dup(), but not in libressl */
 	if (priv->type == KEY_RSA) {
-		RSA *rsa = EVP_PKEY_get1_RSA(priv->pkey);
-		if ((helper = helper_by_rsa(rsa)) == NULL ||
+		RSA *rsa_priv = NULL, *rsa_cert = NULL;
+
+		if ((rsa_priv = EVP_PKEY_get1_RSA(priv->pkey)) == NULL)
+			fatal_f("no RSA pkey");
+		if ((helper = helper_by_rsa(rsa_priv)) == NULL ||
 		    helper->fd == -1)
 			fatal_f("no helper for PKCS11 RSA key");
 		if ((r = sshkey_from_private(priv, &ret)) != 0)
 			fatal_fr(r, "copy key");
-		RSA_set_method(rsa, helper->rsa_meth);
+		if ((rsa_cert = EVP_PKEY_get1_RSA(ret->pkey)) == NULL)
+			fatal_f("no RSA cert pkey");
+		RSA_set_method(rsa_cert, helper->rsa_meth);
 		if (helper->nrsa++ >= INT_MAX)
 			fatal_f("RSA refcount error");
-		EVP_PKEY_set1_RSA(priv->pkey, rsa);
-		RSA_free(rsa);
+		EVP_PKEY_set1_RSA(ret->pkey, rsa_cert);
+		RSA_free(rsa_priv);
+		RSA_free(rsa_cert);
 #if defined(OPENSSL_HAS_ECC) && defined(HAVE_EC_KEY_METHOD_NEW)
 	} else if (priv->type == KEY_ECDSA) {
-		EC_KEY *ec = EVP_PKEY_get1_EC_KEY(priv->pkey);
-		if ((helper = helper_by_ec(ec)) == NULL ||
+		EC_KEY *ec_priv = NULL, *ec_cert = NULL;
+
+		if ((ec_priv = EVP_PKEY_get1_EC_KEY(priv->pkey)) == NULL)
+			fatal_f("no EC pkey");
+		if ((helper = helper_by_ec(ec_priv)) == NULL ||
 		    helper->fd == -1)
 			fatal_f("no helper for PKCS11 EC key");
 		if ((r = sshkey_from_private(priv, &ret)) != 0)
 			fatal_fr(r, "copy key");
-		EC_KEY_set_method(ec, helper->ec_meth);
+		if ((ec_cert = EVP_PKEY_get1_EC_KEY(ret->pkey)) == NULL)
+			fatal_f("no EC cert pkey");
+		EC_KEY_set_method(ec_cert, helper->ec_meth);
 		if (helper->nec++ >= INT_MAX)
 			fatal_f("EC refcount error");
-		EVP_PKEY_set1_EC_KEY(priv->pkey, ec);
-		EC_KEY_free(ec);
+		EVP_PKEY_set1_EC_KEY(ret->pkey, ec_cert);
+		EC_KEY_free(ec_priv);
+		EC_KEY_free(ec_cert);
 #endif
 	} else
 		fatal_f("unknown key type %s", sshkey_type(priv));

@@ -970,7 +970,6 @@ kex_free(struct kex *kex)
 		return;
 
 #ifdef WITH_OPENSSL
-	DH_free(kex->dh);
 	EVP_PKEY_free(kex->pkey);
 #endif /* WITH_OPENSSL */
 	for (mode = 0; mode < MODE_MAX; mode++) {

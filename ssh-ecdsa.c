@@ -190,7 +190,6 @@ ssh_ecdsa_deserialize_public(const char *ktype, struct sshbuf *b,
 	}
 	if ((r = sshbuf_get_eckey(b, ec)) != 0)
 		goto out;
-// wahern: TODO: use EVP_PKEY_public_check instead?
 	if (sshkey_ec_validate_public(EC_KEY_get0_group(ec),
 	    EC_KEY_get0_public_key(ec)) != 0) {
 		r = SSH_ERR_KEY_INVALID_EC_VALUE;
@@ -247,7 +246,6 @@ ssh_ecdsa_deserialize_private(const char *ktype, struct sshbuf *b,
 		r = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
-// wahern: TODO: use EVP_PKEY_private_check?
 	if ((r = sshkey_ec_validate_private(ec)) != 0)
 		goto out;
 	if (EVP_PKEY_set1_EC_KEY(key->pkey, ec) != 1) {
@@ -289,11 +287,9 @@ ssh_ecdsa_sign(struct sshkey *key,
 	if ((hash_alg = sshkey_ec_nid_to_hash_alg(key->ecdsa_nid)) == -1)
 		return SSH_ERR_INTERNAL_ERROR;
 
-	ret = sshkey_calculate_signature(key->pkey, hash_alg, &sigb, &len, data,
-	    dlen);
-	if (ret < 0) {
+	if ((ret = sshkey_pkey_digest_sign(key->pkey, hash_alg, &sigb, &len,
+	    data, dlen)) != 0)
 		goto out;
-	}
 
 	psig = sigb;
 	if (d2i_ECDSA_SIG(&esig, &psig, len) == NULL) {
@@ -342,7 +338,7 @@ ssh_ecdsa_verify(const struct sshkey *key,
 	int ret = SSH_ERR_INTERNAL_ERROR;
 	struct sshbuf *b = NULL, *sigbuf = NULL;
 	char *ktype = NULL;
-	unsigned char *sigb = NULL, *psig = NULL;
+	unsigned char *sigb = NULL;
 
 	if (key == NULL || key->pkey == NULL ||
 	    sshkey_type_plain(key->type) != KEY_ECDSA ||
@@ -375,6 +371,11 @@ ssh_ecdsa_verify(const struct sshkey *key,
 		ret = SSH_ERR_INVALID_FORMAT;
 		goto out;
 	}
+	if (sshbuf_len(sigbuf) != 0) {
+		ret = SSH_ERR_UNEXPECTED_TRAILING_DATA;
+		goto out;
+	}
+
 	if ((esig = ECDSA_SIG_new()) == NULL) {
 		ret = SSH_ERR_ALLOC_FAIL;
 		goto out;
@@ -385,29 +386,18 @@ ssh_ecdsa_verify(const struct sshkey *key,
 	}
 	sig_r = sig_s = NULL; /* transferred */
 
-	/* Figure out the length */
-	if ((len = i2d_ECDSA_SIG(esig, NULL)) == 0) {
-		ret = SSH_ERR_LIBCRYPTO_ERROR;
-		goto out;
-	}
-	if ((sigb = malloc(len)) == NULL) {
-		ret = SSH_ERR_ALLOC_FAIL;
-		goto out;
-	}
-	psig = sigb;
-	if ((len = i2d_ECDSA_SIG(esig, &psig)) == 0) {
+	sigb = NULL;
+	if ((len = i2d_ECDSA_SIG(esig, &sigb)) <= 0) {
 		ret = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
 
-	if (sshbuf_len(sigbuf) != 0) {
-		ret = SSH_ERR_UNEXPECTED_TRAILING_DATA;
+	if ((ret = sshkey_pkey_digest_verify(key->pkey, hash_alg,
+	    data, dlen, sigb, len)) != 0)
 		goto out;
-	}
-
-	ret = sshkey_verify_signature(key->pkey, hash_alg, data, dlen, sigb, len);
+	/* success */
  out:
-	free(sigb);
+	OPENSSL_free(sigb); /* NB. must use OPENSSL_free() for BoringSSL */
 	sshbuf_free(sigbuf);
 	sshbuf_free(b);
 	ECDSA_SIG_free(esig);

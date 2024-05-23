@@ -2975,6 +2975,7 @@ if test "x$openssl" = "xyes" ; then
 		DSA_generate_parameters_ex \
 		EVP_DigestFinal_ex \
 		EVP_DigestInit_ex \
+		EVP_KDF_CTX_new \
 		EVP_MD_CTX_cleanup \
 		EVP_MD_CTX_copy_ex \
 		EVP_MD_CTX_init \

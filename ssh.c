@@ -1284,6 +1284,11 @@ main(int ac, char **av)
 			set_addrinfo_port(addrs, options.port);
 	}
 
+#if USE_OPENSSL_FIPS
+	if (options.fips >= 0)
+		fips_setenabled(options.fips > 0);
+#endif
+
 	/* Fill configuration defaults. */
 	if (fill_default_options(&options) != 0)
 		cleanup_exit(255);

@@ -1772,6 +1772,11 @@ main(int ac, char **av)
 		dh_set_moduli_file(options.moduli_file);
 #endif
 
+#if USE_OPENSSL_FIPS
+	if (options.fips >= 0)
+		fips_setenabled(options.fips > 0);
+#endif
+
 	/* Fill in default values for those options not explicitly set. */
 	fill_default_server_options(&options);
 

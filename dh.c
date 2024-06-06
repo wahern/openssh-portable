@@ -38,6 +38,11 @@
 #include <openssl/bn.h>
 #include <openssl/dh.h>
 
+#ifdef USE_OPENSSL_FIPS
+#include <openssl/core_names.h>
+#include <openssl/param_build.h>
+#endif
+
 #include "dh.h"
 #include "pathnames.h"
 #include "log.h"
@@ -289,6 +294,11 @@ dh_pub_is_valid(EVP_PKEY *pkey, const BIGNUM *dh_pub)
 int
 dh_gen_key(EVP_PKEY *pkey, int need)
 {
+#ifdef USE_OPENSSL_FIPS
+	int priv_len;
+	OSSL_PARAM params[2];
+	EVP_PKEY_CTX *ctx = NULL;
+#endif
 	int pbits;
 	const BIGNUM *dh_p, *pub_key;
 	DH *dh = NULL;
@@ -313,6 +323,32 @@ dh_gen_key(EVP_PKEY *pkey, int need)
 	 * Pollard Rho, Big step/Little Step attacks are O(sqrt(n)),
 	 * so double requested need here.
 	 */
+#ifdef USE_OPENSSL_FIPS
+	priv_len = MINIMUM(need * 2, pbits - 1);
+	params[0] = OSSL_PARAM_construct_int(OSSL_PKEY_PARAM_DH_PRIV_LEN,
+	    &priv_len);
+	params[1] = OSSL_PARAM_construct_end();
+	if ((ctx = EVP_PKEY_CTX_new_from_pkey(NULL, pkey, NULL)) == NULL ||
+	    EVP_PKEY_keygen_init(ctx) != 1 ||
+	    EVP_PKEY_CTX_set_params(ctx, params) != 1 ||
+	    EVP_PKEY_generate(ctx, &pkey) != 1) {
+		error_f("Could not generate keys");
+		r = SSH_ERR_LIBCRYPTO_ERROR;
+		goto out;
+	}
+	if (EVP_PKEY_public_check(ctx) != 1) {
+		error_f("The public key is incorrect");
+		r = SSH_ERR_LIBCRYPTO_ERROR;
+		goto out;
+	}
+	DH_free(dh);
+	if ((dh = EVP_PKEY_get1_DH(pkey)) == NULL) {
+		r = SSH_ERR_LIBCRYPTO_ERROR;
+		goto out;
+	}
+	DH_get0_key(dh, &pub_key, NULL);
+#else
+#pragma message  "building non-FIPS dh_gen_key"
 	if (!DH_set_length(dh, MINIMUM(need * 2, pbits - 1))) {
 		r = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
@@ -327,6 +363,7 @@ dh_gen_key(EVP_PKEY *pkey, int need)
 		r = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
+#endif
 	if (!dh_pub_is_valid(pkey, pub_key)) {
 		r = SSH_ERR_INVALID_FORMAT;
 		goto out;
@@ -334,6 +371,9 @@ dh_gen_key(EVP_PKEY *pkey, int need)
 	/* success */
 	r = 0;
  out:
+#ifdef USE_OPENSSL_FIPS
+	EVP_PKEY_CTX_free(ctx);
+#endif
 	DH_free(dh);
 	return r;
 }
@@ -341,6 +381,19 @@ dh_gen_key(EVP_PKEY *pkey, int need)
 EVP_PKEY *
 dh_new_group_asc(const char *gen, const char *modulus)
 {
+#ifdef USE_OPENSSL_FIPS
+	BIGNUM *dh_p = NULL, *dh_g = NULL;
+	EVP_PKEY *pkey = NULL;
+
+	if (BN_hex2bn(&dh_p, modulus) == 0 || BN_hex2bn(&dh_g, gen) == 0)
+		goto out;
+	pkey = dh_new_group(dh_g, dh_p);
+ out:
+	BN_clear_free(dh_p);
+	BN_clear_free(dh_g);
+	return pkey;
+#else
+#pragma message "building non-FIPS dh_new_group_asc"
 	DH *dh = NULL;
 	EVP_PKEY *pkey = NULL;
 	BIGNUM *dh_p = NULL, *dh_g = NULL;
@@ -363,6 +416,7 @@ dh_new_group_asc(const char *gen, const char *modulus)
 	BN_clear_free(dh_p);
 	BN_clear_free(dh_g);
 	return NULL;
+#endif
 }
 
 /*
@@ -372,6 +426,29 @@ dh_new_group_asc(const char *gen, const char *modulus)
 EVP_PKEY *
 dh_new_group(BIGNUM *gen, BIGNUM *modulus)
 {
+#ifdef USE_OPENSSL_FIPS
+	OSSL_PARAM_BLD *bld = NULL;
+	OSSL_PARAM *params = NULL;
+	EVP_PKEY_CTX *ctx = NULL;
+	EVP_PKEY *pkey = NULL;
+
+	if ((bld = OSSL_PARAM_BLD_new()) == NULL ||
+	    OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_P, modulus) != 1 ||
+	    OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_G, gen) != 1 ||
+	    (params = OSSL_PARAM_BLD_to_param(bld)) == NULL)
+		goto out;
+	if ((ctx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL)) == NULL ||
+	    EVP_PKEY_fromdata_init(ctx) != 1 ||
+	    EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEY_PARAMETERS, params) != 1)
+		goto out;
+
+ out:
+	OSSL_PARAM_BLD_free(bld);
+	OSSL_PARAM_free(params);
+	EVP_PKEY_CTX_free(ctx);
+	return pkey;
+#else
+#pragma message "building non-FIPS dh_new_group"
 	BIGNUM *copy_gen = NULL, *copy_modulus = NULL;
 	DH *dh = NULL;
 	EVP_PKEY *pkey = NULL;
@@ -394,6 +471,7 @@ dh_new_group(BIGNUM *gen, BIGNUM *modulus)
 	}
 
 	return pkey;
+#endif
 }
 
 /* rfc2409 "Second Oakley Group" (1024 bits) */

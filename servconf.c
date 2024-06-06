@@ -90,6 +90,9 @@ initialize_server_options(ServerOptions *options)
 
 	/* Portable-specific options */
 	options->use_pam = -1;
+#ifdef USE_OPENSSL_FIPS
+	options->fips = -1;
+#endif
 
 	/* Standard Options */
 	options->num_ports = 0;
@@ -219,11 +222,16 @@ assemble_algorithms(ServerOptions *o)
 	all_key = sshkey_alg_list(0, 0, 1, ',');
 	all_sig = sshkey_alg_list(0, 1, 1, ',');
 	/* remove unsupported algos from default lists */
-	def_cipher = match_filter_allowlist(KEX_SERVER_ENCRYPT, all_cipher);
-	def_mac = match_filter_allowlist(KEX_SERVER_MAC, all_mac);
-	def_kex = match_filter_allowlist(KEX_SERVER_KEX, all_kex);
-	def_key = match_filter_allowlist(KEX_DEFAULT_PK_ALG, all_key);
-	def_sig = match_filter_allowlist(SSH_ALLOWED_CA_SIGALGS, all_sig);
+	def_cipher = match_filter_allowlist((FIPS_mode() ?
+	    KEX_FIPS_ENCRYPT : KEX_SERVER_ENCRYPT), all_cipher);
+	def_mac = match_filter_allowlist((FIPS_mode() ?
+	    KEX_FIPS_MAC : KEX_SERVER_MAC), all_mac);
+	def_kex = match_filter_allowlist((FIPS_mode() ?
+	    KEX_DEFAULT_KEX_FIPS : KEX_SERVER_KEX), all_kex);
+	def_key = match_filter_allowlist((FIPS_mode() ?
+	    KEX_FIPS_PK_ALG : KEX_DEFAULT_PK_ALG), all_key);
+	def_sig = match_filter_allowlist((FIPS_mode() ?
+	    KEX_FIPS_PK_ALG : SSH_ALLOWED_CA_SIGALGS), all_sig);
 #define ASSEMBLE(what, defaults, all) \
 	do { \
 		if ((r = kex_assemble_names(&o->what, defaults, all)) != 0) \
@@ -499,6 +507,7 @@ typedef enum {
 	sBadOption,		/* == unknown option */
 	/* Portable-specific options */
 	sUsePAM,
+	sFIPS,
 	/* Standard Options */
 	sPort, sHostKeyFile, sLoginGraceTime,
 	sPermitRootLogin, sLogFacility, sLogLevel, sLogVerbose,
@@ -553,6 +562,11 @@ static struct {
 	{ "usepam", sUnsupported, SSHCFG_GLOBAL },
 #endif
 	{ "pamauthenticationviakbdint", sDeprecated, SSHCFG_GLOBAL },
+#ifdef USE_OPENSSL_FIPS
+	{ "fips", sFIPS, SSHCFG_GLOBAL },
+#else
+	{ "fips", sUnsupported, SSHCFG_GLOBAL },
+#endif
 	/* Standard Options */
 	{ "port", sPort, SSHCFG_GLOBAL },
 	{ "hostkey", sHostKeyFile, SSHCFG_GLOBAL },
@@ -1369,6 +1383,9 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 	/* Portable-specific options */
 	case sUsePAM:
 		intptr = &options->use_pam;
+		goto parse_flag;
+	case sFIPS:
+		intptr = &options->fips;
 		goto parse_flag;
 
 	/* Standard Options */
@@ -3082,6 +3099,9 @@ dump_config(ServerOptions *o)
 	/* integer arguments */
 #ifdef USE_PAM
 	dump_cfg_fmtint(sUsePAM, o->use_pam);
+#endif
+#ifdef USE_OPENSSL_FIPS
+	dump_cfg_fmtint(sFIPS, o->fips);
 #endif
 	dump_cfg_int(sLoginGraceTime, o->login_grace_time);
 	dump_cfg_int(sX11DisplayOffset, o->x11_display_offset);

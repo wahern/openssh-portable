@@ -179,6 +179,7 @@ typedef enum {
 	oPubkeyAcceptedAlgorithms, oCASignatureAlgorithms, oProxyJump,
 	oSecurityKeyProvider, oKnownHostsCommand, oRequiredRSASize,
 	oEnableEscapeCommandline, oObscureKeystrokeTiming, oChannelTimeout,
+	oFIPS,
 	oIgnore, oIgnoredUnknownOption, oDeprecated, oUnsupported
 } OpCodes;
 
@@ -329,6 +330,7 @@ static struct {
 	{ "enableescapecommandline", oEnableEscapeCommandline },
 	{ "obscurekeystroketiming", oObscureKeystrokeTiming },
 	{ "channeltimeout", oChannelTimeout },
+	{ "fips", oFIPS },
 
 	{ NULL, oBadOption }
 };
@@ -2388,6 +2390,10 @@ parse_pubkey_algos:
 		}
 		break;
 
+	case oFIPS:
+		intptr = &options->fips;
+		goto parse_flag;
+
 	case oDeprecated:
 		debug("%s line %d: Deprecated option \"%s\"",
 		    filename, linenum, keyword);
@@ -2644,6 +2650,7 @@ initialize_options(Options * options)
 	options->tag = NULL;
 	options->channel_timeouts = NULL;
 	options->num_channel_timeouts = 0;
+	options->fips = -1;
 }
 
 /*
@@ -2858,11 +2865,16 @@ fill_default_options(Options * options)
 	all_key = sshkey_alg_list(0, 0, 1, ',');
 	all_sig = sshkey_alg_list(0, 1, 1, ',');
 	/* remove unsupported algos from default lists */
-	def_cipher = match_filter_allowlist(KEX_CLIENT_ENCRYPT, all_cipher);
-	def_mac = match_filter_allowlist(KEX_CLIENT_MAC, all_mac);
-	def_kex = match_filter_allowlist(KEX_CLIENT_KEX, all_kex);
-	def_key = match_filter_allowlist(KEX_DEFAULT_PK_ALG, all_key);
-	def_sig = match_filter_allowlist(SSH_ALLOWED_CA_SIGALGS, all_sig);
+	def_cipher = match_filter_allowlist((FIPS_mode() ?
+	    KEX_FIPS_ENCRYPT : KEX_CLIENT_ENCRYPT), all_cipher);
+	def_mac = match_filter_allowlist((FIPS_mode() ?
+	    KEX_FIPS_MAC : KEX_CLIENT_MAC), all_mac);
+	def_kex = match_filter_allowlist((FIPS_mode() ?
+	    KEX_DEFAULT_KEX_FIPS : KEX_CLIENT_KEX), all_kex);
+	def_key = match_filter_allowlist((FIPS_mode() ?
+	    KEX_FIPS_PK_ALG : KEX_DEFAULT_PK_ALG), all_key);
+	def_sig = match_filter_allowlist((FIPS_mode() ?
+	    KEX_FIPS_PK_ALG : SSH_ALLOWED_CA_SIGALGS), all_sig);
 #define ASSEMBLE(what, defaults, all) \
 	do { \
 		if ((r = kex_assemble_names(&options->what, \
@@ -3556,6 +3568,7 @@ dump_client_config(Options *o, const char *host)
 	dump_cfg_fmtint(oVisualHostKey, o->visual_host_key);
 	dump_cfg_fmtint(oUpdateHostkeys, o->update_hostkeys);
 	dump_cfg_fmtint(oEnableEscapeCommandline, o->enable_escape_commandline);
+	dump_cfg_fmtint(oFIPS, o->fips);
 
 	/* Integer options */
 	dump_cfg_int(oCanonicalizeMaxDots, o->canonicalize_max_dots);

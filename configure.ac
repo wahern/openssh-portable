@@ -2082,6 +2082,16 @@ AC_ARG_ENABLE([dsa-keys],
 	[  enable_dsa="$enableval" ]
 )
 
+disable_fips=
+AC_ARG_ENABLE([fips],
+	[  --disable-fips          disable FIPS support [no]],
+	[
+		if test "x$enableval" = "xno" ; then
+			disable_fips=1
+		fi
+	]
+)
+
 AC_SEARCH_LIBS([dlopen], [dl])
 AC_CHECK_FUNCS([dlopen])
 AC_CHECK_DECL([RTLD_NOW], [], [], [#include <dlfcn.h>])
@@ -3222,6 +3232,10 @@ if test "x$openssl" = "xyes" ; then
 			fi
 		fi
 	fi
+
+	if test ! -z "x$disable_fips" ; then
+		AC_CHECK_FUNCS([EVP_default_properties_enable_fips])
+	fi
 fi
 
 # PKCS11/U2F depend on OpenSSL and dlopen().
@@ -3320,6 +3334,20 @@ if test "x$enable_sk" = "xyes" -a "x$enable_sk_internal" != "xno" ; then
 		LIBS="$saved_LIBS"
 	fi
 fi
+
+enable_fips=yes
+if test ! -z "$disable_fips" ; then
+	enable_fips="disabled by user"
+elif test "x$openssl" != "xyes" ; then
+	enable_fips="disabled; missing libcrypto"
+elif test "x$ac_cv_func_EVP_default_properties_enable_fips" != "xyes" ; then
+	enable_fips="disabled; missing EVP_default_properties_enable_fips"
+fi
+AC_MSG_CHECKING([whether to enable OpenSSL FIPS support])
+if test "x$enable_fips" = "xyes" ; then
+	AC_DEFINE([USE_OPENSSL_FIPS], [1], [Enable OpenSSL FIPS support])
+fi
+AC_MSG_RESULT([$enable_fips])
 
 AC_CHECK_FUNCS([ \
 	arc4random \
@@ -5721,6 +5749,7 @@ echo "              Random number source: $RAND_MSG"
 echo "             Privsep sandbox style: $SANDBOX_STYLE"
 echo "                   PKCS#11 support: $enable_pkcs11"
 echo "                  U2F/FIDO support: $enable_sk"
+echo "                      FIPS support: $enable_fips"
 
 echo ""
 

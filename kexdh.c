@@ -35,6 +35,11 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 
+#ifdef USE_OPENSSL_FIPS
+#include <openssl/core_names.h>
+#include <openssl/param_build.h>
+#endif
+
 #include "openbsd-compat/openssl-compat.h"
 
 #include "sshkey.h"
@@ -73,15 +78,23 @@ kex_dh_keygen(struct kex *kex)
 int
 kex_dh_compute_key(struct kex *kex, BIGNUM *dh_pub, struct sshbuf *out)
 {
+#ifdef USE_OPENSSL_FIPS
+	OSSL_PARAM_BLD *bld = NULL;
+	OSSL_PARAM *params = NULL, *domain = NULL, *extra = NULL;
+#endif
 	BIGNUM *shared_secret = NULL;
+#ifndef USE_OPENSSL_FIPS
 	const BIGNUM *p, *g;
+#endif
 	EVP_PKEY *dh_pkey = NULL;
 	EVP_PKEY_CTX *ctx = NULL;
 	u_char *kbuf = NULL;
 	size_t klen = 0;
 	int r = 0;
 	DH *dh_peer = NULL;
+#ifndef USE_OPENSSL_FIPS
 	BIGNUM *copy_p = NULL, *copy_g = NULL, *copy_pub = NULL;
+#endif
 
 #ifdef DEBUG_KEXDH
 	fprintf(stderr, "dh_pub= ");
@@ -97,6 +110,30 @@ kex_dh_compute_key(struct kex *kex, BIGNUM *dh_pub, struct sshbuf *out)
 		goto out;
 	}
 
+#ifdef USE_OPENSSL_FIPS
+	if (EVP_PKEY_todata(kex->pkey, EVP_PKEY_KEY_PARAMETERS, &domain) != 1 ||
+	    (bld = OSSL_PARAM_BLD_new()) == NULL ||
+	    OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_PUB_KEY, dh_pub) != 1 ||
+	    (extra = OSSL_PARAM_BLD_to_param(bld)) == NULL ||
+	    (params = OSSL_PARAM_merge(domain, extra)) == NULL) {
+		r = SSH_ERR_LIBCRYPTO_ERROR;
+		goto out;
+	}
+	if ((ctx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL)) == NULL ||
+	    EVP_PKEY_fromdata_init(ctx) != 1 ||
+	    EVP_PKEY_fromdata(ctx, &dh_pkey, EVP_PKEY_PUBLIC_KEY, params) != 1) {
+		error_f("assemble peer pkey failed");
+		r = SSH_ERR_LIBCRYPTO_ERROR;
+		goto out;
+	}
+	EVP_PKEY_CTX_free(ctx);
+	if ((ctx = EVP_PKEY_CTX_new_from_pkey(NULL, kex->pkey, NULL)) == NULL) {
+		error_f("setup peer pkey failed");
+		r = SSH_ERR_LIBCRYPTO_ERROR;
+		goto out;
+	}
+#else
+#pragma message "building non-FIPS kex_dh_compute_key"
 	if ((dh_peer = DH_new()) == NULL) {
 		error_f("allocate pkey/dh_peer failed");
 		r = SSH_ERR_ALLOC_FAIL;
@@ -128,6 +165,7 @@ kex_dh_compute_key(struct kex *kex, BIGNUM *dh_pub, struct sshbuf *out)
 		r = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
+#endif
 	if (EVP_PKEY_derive_init(ctx) != 1 ||
 	    EVP_PKEY_derive_set_peer(ctx, dh_pkey) != 1 ||
 	    EVP_PKEY_derive(ctx, NULL, &klen) != 1) {
@@ -155,9 +193,16 @@ kex_dh_compute_key(struct kex *kex, BIGNUM *dh_pub, struct sshbuf *out)
 	BN_clear_free(shared_secret);
 	EVP_PKEY_free(dh_pkey);
 	DH_free(dh_peer);
+#ifdef USE_OPENSSL_FIPS
+	OSSL_PARAM_BLD_free(bld);
+	OSSL_PARAM_free(params);
+	OSSL_PARAM_free(extra);
+	OSSL_PARAM_free(domain);
+#else
 	BN_free(copy_pub);
 	BN_free(copy_p);
 	BN_free(copy_g);
+#endif
 	EVP_PKEY_CTX_free(ctx);
 	return r;
 }

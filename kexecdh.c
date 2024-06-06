@@ -175,6 +175,24 @@ kex_ecdh_dec_key_group(struct kex *kex, const struct sshbuf *ec_blob,
 		goto out;
 	}
 
+#ifdef USE_OPENSSL_FIPS
+	OSSL_PARAM *params = NULL;
+	if (EVP_PKEY_todata(peer_key, EVP_PKEY_PUBLIC_KEY, &params) != 1 ||
+	    (ctx = EVP_PKEY_CTX_new_from_name(NULL, "EC", NULL)) == NULL ||
+	    EVP_PKEY_fromdata_init(ctx) != 1 ||
+	    EVP_PKEY_fromdata(ctx, &peer_key, EVP_PKEY_PUBLIC_KEY, params) != 1) {
+		error_f("assemble peer pkey failed");
+		r = SSH_ERR_LIBCRYPTO_ERROR;
+		OSSL_PARAM_free(params);
+		goto out;
+	}
+	OSSL_PARAM_free(params);
+	EVP_PKEY_CTX_free(ctx);
+	ctx = NULL;
+#else
+#pragma message "building non-FIPS kex_ecdh_dec_key_group"
+#endif
+
 #ifdef DEBUG_KEXECDH
 	fputs("public key:\n", stderr);
 	sshkey_dump_ec_point(EC_KEY_get0_group(ec),

@@ -484,6 +484,11 @@ sshkey_type_certified(int type)
 static const EVP_MD *
 ssh_digest_to_md(int digest_type)
 {
+#ifdef USE_OPENSSL_FIPS
+	// must use EVP_MD_fetch to be able to query provider
+	const char *name = ssh_digest_alg_name(digest_type);
+	return (name)? EVP_MD_fetch(NULL, name, NULL) : NULL;
+#else
 	switch (digest_type) {
 	case SSH_DIGEST_SHA1:
 		return EVP_sha1();
@@ -495,6 +500,7 @@ ssh_digest_to_md(int digest_type)
 		return EVP_sha512();
 	}
 	return NULL;
+#endif
 }
 
 int

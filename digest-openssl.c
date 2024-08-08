@@ -115,6 +115,7 @@ ssh_digest_start(int alg)
 {
 	const struct ssh_digest *digest = ssh_digest_by_alg(alg);
 	struct ssh_digest_ctx *ret;
+	const EVP_MD *md;
 
 	if (digest == NULL || ((ret = calloc(1, sizeof(*ret))) == NULL))
 		return NULL;
@@ -123,7 +124,9 @@ ssh_digest_start(int alg)
 		free(ret);
 		return NULL;
 	}
-	if (EVP_DigestInit_ex(ret->mdctx, digest->mdfunc(), NULL) != 1) {
+	// must use EVP_MD_fetch to be able to query provider
+	md = EVP_MD_fetch(NULL, EVP_MD_get0_name(digest->mdfunc()), NULL);
+	if (EVP_DigestInit_ex(ret->mdctx, md, NULL) != 1) {
 		ssh_digest_free(ret);
 		return NULL;
 	}

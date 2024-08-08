@@ -41,6 +41,11 @@ chachapoly_new(const u_char *key, u_int keylen)
 {
 	struct chachapoly_ctx *ctx;
 
+	if (FIPS_mode()) {
+		logit_f("non-OpenSSL cipher type chachapoly is not allowed in FIPS mode");
+		return NULL;
+	}
+
 	if (keylen != (32 + 32)) /* 2 x 256 bit keys */
 		return NULL;
 	if ((ctx = calloc(1, sizeof(*ctx))) == NULL)

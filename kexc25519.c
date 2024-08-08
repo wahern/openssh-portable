@@ -35,6 +35,7 @@
 
 #include "sshkey.h"
 #include "kex.h"
+#include "log.h"
 #include "sshbuf.h"
 #include "digest.h"
 #include "ssherr.h"
@@ -95,6 +96,11 @@ kex_c25519_keypair(struct kex *kex)
 	u_char *cp = NULL;
 	int r;
 
+	if (FIPS_mode()) {
+		logit_f("Key exchange type c25519 is not allowed in FIPS mode");
+		return SSH_ERR_INVALID_ARGUMENT;
+	}
+
 	if ((buf = sshbuf_new()) == NULL)
 		return SSH_ERR_ALLOC_FAIL;
 	if ((r = sshbuf_reserve(buf, CURVE25519_SIZE, &cp)) != 0)
@@ -123,6 +129,12 @@ kex_c25519_enc(struct kex *kex, const struct sshbuf *client_blob,
 
 	*server_blobp = NULL;
 	*shared_secretp = NULL;
+
+	if (FIPS_mode()) {
+		logit_f("Key exchange type c25519 is not allowed in FIPS mode");
+		r = SSH_ERR_INVALID_ARGUMENT;
+		goto out;
+	}
 
 	if (sshbuf_len(client_blob) != CURVE25519_SIZE) {
 		r = SSH_ERR_SIGNATURE_INVALID;
@@ -171,6 +183,12 @@ kex_c25519_dec(struct kex *kex, const struct sshbuf *server_blob,
 	int r;
 
 	*shared_secretp = NULL;
+
+	if (FIPS_mode()) {
+		logit_f("Key exchange type c25519 is not allowed in FIPS mode");
+		r = SSH_ERR_INVALID_ARGUMENT;
+		goto out;
+	}
 
 	if (sshbuf_len(server_blob) != CURVE25519_SIZE) {
 		r = SSH_ERR_SIGNATURE_INVALID;

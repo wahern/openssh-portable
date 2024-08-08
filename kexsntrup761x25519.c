@@ -35,6 +35,7 @@
 
 #include "sshkey.h"
 #include "kex.h"
+#include "log.h"
 #include "sshbuf.h"
 #include "digest.h"
 #include "ssherr.h"
@@ -46,6 +47,11 @@ kex_kem_sntrup761x25519_keypair(struct kex *kex)
 	u_char *cp = NULL;
 	size_t need;
 	int r;
+
+	if (FIPS_mode()) {
+		logit_f("Key exchange type sntrup761 is not allowed in FIPS mode");
+		return SSH_ERR_INVALID_ARGUMENT;
+	}
 
 	if ((buf = sshbuf_new()) == NULL)
 		return SSH_ERR_ALLOC_FAIL;
@@ -85,6 +91,12 @@ kex_kem_sntrup761x25519_enc(struct kex *kex,
 
 	*server_blobp = NULL;
 	*shared_secretp = NULL;
+
+	if (FIPS_mode()) {
+		logit_f("Key exchange type sntrup761 is not allowed in FIPS mode");
+		r = SSH_ERR_INVALID_ARGUMENT;
+		goto out;
+	}
 
 	/* client_blob contains both KEM and ECDH client pubkeys */
 	need = crypto_kem_sntrup761_PUBLICKEYBYTES + CURVE25519_SIZE;
@@ -168,6 +180,12 @@ kex_kem_sntrup761x25519_dec(struct kex *kex,
 	int r, decoded;
 
 	*shared_secretp = NULL;
+
+	if (FIPS_mode()) {
+		logit_f("Key exchange type sntrup761 is not allowed in FIPS mode");
+		r = SSH_ERR_INVALID_ARGUMENT;
+		goto out;
+	}
 
 	need = crypto_kem_sntrup761_CIPHERTEXTBYTES + CURVE25519_SIZE;
 	if (sshbuf_len(server_blob) != need) {

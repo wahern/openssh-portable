@@ -159,6 +159,11 @@ ssh_ed25519_sign(struct sshkey *key,
 	if (sigp != NULL)
 		*sigp = NULL;
 
+	if (FIPS_mode()) {
+		logit_f("Ed25519 keys are not allowed in FIPS mode");
+		return SSH_ERR_INVALID_ARGUMENT;
+	}
+
 	if (key == NULL ||
 	    sshkey_type_plain(key->type) != KEY_ED25519 ||
 	    key->ed25519_sk == NULL ||
@@ -214,6 +219,11 @@ ssh_ed25519_verify(const struct sshkey *key,
 	size_t len;
 	unsigned long long smlen = 0, mlen = 0;
 	int r, ret;
+
+	if (FIPS_mode()) {
+		logit_f("Ed25519 keys are not allowed in FIPS mode");
+		return SSH_ERR_INVALID_ARGUMENT;
+	}
 
 	if (key == NULL ||
 	    sshkey_type_plain(key->type) != KEY_ED25519 ||

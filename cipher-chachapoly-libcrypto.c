@@ -56,9 +56,7 @@ chachapoly_new(const u_char *key, u_int keylen)
 		goto fail;
 	if (EVP_CIPHER_CTX_iv_length(ctx->header_evp) != 16)
 		goto fail;
-	fips_logprovider_f("EVP_CIPHER_CTX",
-	    EVP_CIPHER_get0_provider(EVP_CIPHER_CTX_get0_cipher(ctx->main_evp)),
-	    EVP_CIPHER_CTX_get0_name(ctx->main_evp));
+	fips_logprovider_f(ctx->main_evp);
 	return ctx;
  fail:
 	chachapoly_free(ctx);

@@ -314,9 +314,7 @@ cipher_init(struct sshcipher_ctx **ccp, const struct sshcipher *cipher,
 		ret = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
-	fips_logprovider_f("EVP_CIPHER_CTX",
-	    EVP_CIPHER_get0_provider(EVP_CIPHER_CTX_get0_cipher(cc->evp)),
-	    EVP_CIPHER_CTX_get0_name(cc->evp));
+	fips_logprovider_f(cc->evp);
 	ret = 0;
 #endif /* WITH_OPENSSL */
  out:

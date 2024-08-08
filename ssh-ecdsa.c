@@ -128,10 +128,8 @@ ssh_ecdsa_generate(struct sshkey *k, int bits)
 		EVP_PKEY_free(res);
 		return SSH_ERR_LIBCRYPTO_ERROR;
 	}
-	fips_logprovider_f("EVP_PKEY_CTX", EVP_PKEY_CTX_get0_provider(ctx),
-	    fips_getpkeyctxname(ctx, NULL));
-	fips_logprovider_f("EVP_PKEY", EVP_PKEY_get0_provider(res),
-	    EVP_PKEY_get0_type_name(res));
+	fips_logprovider_f(ctx);
+	fips_logprovider_f(res);
 
 	k->pkey = res;
 	return 0;

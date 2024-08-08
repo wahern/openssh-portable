@@ -127,9 +127,7 @@ ssh_digest_start(int alg)
 		ssh_digest_free(ret);
 		return NULL;
 	}
-	fips_logprovider_f("EVP_MD_CTX",
-	    EVP_MD_get0_provider(EVP_MD_CTX_get0_md(ret->mdctx)),
-	    EVP_MD_CTX_get0_name(ret->mdctx));
+	fips_logprovider_f(ret->mdctx);
 	return ret;
 }
 

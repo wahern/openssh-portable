@@ -149,10 +149,8 @@ ssh_rsa_generate(struct sshkey *k, int bits)
 		ret = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
-	fips_logprovider_f("EVP_PKEY_CTX", EVP_PKEY_CTX_get0_provider(ctx),
-	    fips_getpkeyctxname(ctx, NULL));
-	fips_logprovider_f("EVP_PKEY", EVP_PKEY_get0_provider(res),
-	    EVP_PKEY_get0_type_name(res));
+	fips_logprovider_f(ctx);
+	fips_logprovider_f(res);
 
 	k->pkey = res;
 	if (k->pkey) {

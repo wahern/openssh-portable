@@ -174,5 +174,6 @@
 #include "openbsd-compat/bsd-nextstep.h"
 
 #include "entropy.h"
+#include "fips.h"
 
 #endif /* INCLUDES_H */

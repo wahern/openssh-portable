@@ -61,6 +61,10 @@ kex_ecdh_generate(int ec_nid)
 		error_f("Could not generate ec keys");
 		goto out;
 	}
+	fips_logprovider_f("EVP_PKEY_CTX", EVP_PKEY_CTX_get0_provider(ctx),
+	    fips_getpkeyctxname(ctx, NULL));
+	fips_logprovider_f("EVP_PKEY", EVP_PKEY_get0_provider(pkey),
+	    EVP_PKEY_get0_type_name(pkey));
  out:
 	EVP_PKEY_CTX_free(ctx);
 	return pkey;
@@ -219,6 +223,8 @@ kex_ecdh_dec_key_group(struct kex *kex, const struct sshbuf *ec_blob,
 		r = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
+	fips_logprovider_f("EVP_PKEY_CTX", EVP_PKEY_CTX_get0_provider(ctx),
+	    fips_getpkeyctxname(ctx, NULL));
 #ifdef DEBUG_KEXECDH
 	dump_digest("shared secret", kbuf, klen);
 #endif

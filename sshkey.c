@@ -528,6 +528,9 @@ sshkey_pkey_digest_sign(EVP_PKEY *pkey, int hash_alg, u_char **sigp,
 		ret = SSH_ERR_LIBCRYPTO_ERROR;
 		goto error;
 	}
+	fips_logprovider_f("EVP_MD_CTX",
+	    EVP_MD_get0_provider(EVP_MD_CTX_get0_md(ctx)),
+	    EVP_MD_CTX_get0_name(ctx));
 
 	*sigp = sig;
 	*lenp = len;
@@ -568,7 +571,9 @@ sshkey_pkey_digest_verify(EVP_PKEY *pkey, int hash_alg, const u_char *data,
 		ret = SSH_ERR_LIBCRYPTO_ERROR;
 		break;
 	}
-
+	fips_logprovider_f("EVP_MD_CTX",
+	    EVP_MD_get0_provider(EVP_MD_CTX_get0_md(ctx)),
+	    EVP_MD_CTX_get0_name(ctx));
 done:
 	EVP_MD_CTX_free(ctx);
 	return ret;

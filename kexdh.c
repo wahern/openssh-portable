@@ -132,6 +132,8 @@ kex_dh_compute_key(struct kex *kex, BIGNUM *dh_pub, struct sshbuf *out)
 		r = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
+	fips_logprovider_f("EVP_PKEY_CTX", EVP_PKEY_CTX_get0_provider(ctx),
+	    fips_getpkeyctxname(ctx, NULL));
 #else
 #pragma message "building non-FIPS kex_dh_compute_key"
 	if ((dh_peer = DH_new()) == NULL) {

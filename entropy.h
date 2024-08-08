@@ -31,13 +31,4 @@ void seed_rng(void);
 void rexec_send_rng_seed(struct sshbuf *);
 void rexec_recv_rng_seed(struct sshbuf *);
 
-#ifdef USE_OPENSSL_FIPS
-#define FIPS_mode() fips_isenabled()
-void fips_init(void);
-_Bool fips_isenabled(void);
-void fips_setenabled(_Bool);
-#else
-#define FIPS_mode() 0
-#endif
-
 #endif /* _RANDOMS_H */

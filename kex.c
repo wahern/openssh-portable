@@ -1391,6 +1391,9 @@ derive_key(struct ssh *ssh, int id, u_int need, u_char *hash, u_int hashlen,
 		r = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
+	fips_logprovider_f("EVP_KDF_CTX",
+	    EVP_KDF_get0_provider(EVP_KDF_CTX_kdf(ctx)),
+	    EVP_KDF_get0_name(EVP_KDF_CTX_kdf(ctx)));
 #ifdef DEBUG_KEX
 	fprintf(stderr, "key '%c'== ", id);
 	dump_digest("key", key, key_len);

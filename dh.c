@@ -336,6 +336,8 @@ dh_gen_key(EVP_PKEY *pkey, int need)
 		r = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
+	fips_logprovider_f("EVP_PKEY_CTX", EVP_PKEY_CTX_get0_provider(ctx),
+	    fips_getpkeyctxname(ctx, NULL));
 	if (EVP_PKEY_public_check(ctx) != 1) {
 		error_f("The public key is incorrect");
 		r = SSH_ERR_LIBCRYPTO_ERROR;

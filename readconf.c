@@ -2857,6 +2857,8 @@ fill_default_options(Options * options)
 		options->obscure_keystroke_timing_interval =
 		    SSH_KEYSTROKE_DEFAULT_INTERVAL_MS;
 	}
+	if (options->fips == -1)
+		options->fips = 0;
 
 	/* Expand KEX name lists */
 	all_cipher = cipher_alg_list(',', 0);

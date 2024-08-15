@@ -288,6 +288,8 @@ fill_default_server_options(ServerOptions *options)
 	/* Portable-specific options */
 	if (options->use_pam == -1)
 		options->use_pam = 0;
+	if (options->fips == -1)
+		options->fips = 0;
 
 	/* Standard Options */
 	if (options->num_host_key_files == 0) {

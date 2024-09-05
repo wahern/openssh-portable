@@ -49,6 +49,7 @@
 #include <util.h>
 #endif /* HAVE_UTIL_H */
 
+#include "log.h"
 #include "ssh2.h"
 #include "ssherr.h"
 #include "misc.h"
@@ -527,8 +528,40 @@ sshkey_pkey_digest_sign(EVP_PKEY *pkey, int hash_alg, u_char **sigp,
 		goto error;
 	}
 	len = slen;
+#ifdef USE_OPENSSL_FIPS
+	/*
+	 * Unbreak "FIPS-preferred" mode. If OpenSSL is configured with
+	 * default_properties set to "?fips=yes", then it will always use
+	 * the fips provider for all DSA and RSA operations. However, the
+	 * fips provider only supports verification of DSA and RSA/SHA-1
+	 * signatures, and would otherwise fail below. (See also
+	 * ssh_rsa_generate in ssh-rsa.c.)
+	 */
+	static const char nofips[] = "provider!=fips";
+	const char *props = NULL;
+	if (!FIPS_mode()) {
+		if (EVP_PKEY_is_a(pkey, "DSA") &&
+		    fips_canskipforkeytype("DSA")) {
+			verbose_f("skipping fips provider for DSA signing");
+			props = nofips;
+		} else if (EVP_PKEY_is_a(pkey, "RSA") &&
+		    fips_canskipforkeytype("RSA")) {
+			if (hash_alg == SSH_DIGEST_SHA1) {
+				verbose_f("skipping fips provider for RSA/SHA-1 signing");
+				props = nofips;
+			} else if (EVP_PKEY_bits(pkey) < 2048) {
+				verbose_f("skipping fips provider for %d-bit RSA signing", EVP_PKEY_bits(pkey));
+				props = nofips;
+			}
+		}
+	}
+	if (EVP_DigestSignInit_ex(ctx, NULL,
+	    EVP_MD_get0_name(ssh_digest_to_md(hash_alg)), NULL, props,
+	    pkey, NULL) != 1 ||
+#else
 	if (EVP_DigestSignInit(ctx, NULL, ssh_digest_to_md(hash_alg),
 	        NULL, pkey) != 1 ||
+#endif
 	    EVP_DigestSignUpdate(ctx, data, datalen) != 1 ||
 	    EVP_DigestSignFinal(ctx, sig, &len) != 1) {
 		ret = SSH_ERR_LIBCRYPTO_ERROR;

@@ -16,6 +16,8 @@
 #include "includes.h"
 #include "log.h"
 
+#include <string.h>
+
 #ifdef USE_OPENSSL_FIPS
 #include <openssl/core_names.h>
 #include <openssl/crypto.h>
@@ -174,19 +176,39 @@ fips_setenabled(_Bool enabled)
 	fips_enabled = 1;
 }
 
-const char *
-fips_getpkeyctxname(EVP_PKEY_CTX *ctx, const char *unknown)
+/*
+ * return whether we can (attempt to) set "provider!=fips" property for key
+ * type
+ */
+_Bool
+fips_canskipforkeytype(const char *keytype)
 {
-	EVP_PKEY *key = (ctx)? EVP_PKEY_CTX_get0_pkey(ctx) : NULL;
-	const char *name = (key)? EVP_PKEY_get0_type_name(key) : NULL;
-	return (name)? name : unknown;
+	/*
+	 * XXX: it would be better to define and check an openssl.cnf
+	 * configuration value rather than hardcode a heuristic
+	 */
+	return !FIPS_mode() && OSSL_PROVIDER_available(NULL, "default") &&
+	    fips_isdefaultforkeytype(keytype);
+}
+
+/* return whether fips is default provider for specified keytype */
+_Bool
+fips_isdefaultforkeytype(const char *keytype)
+{
+	EVP_KEYMGMT *keymgmt = EVP_KEYMGMT_fetch(NULL, keytype, NULL);
+	const OSSL_PROVIDER *prov = (keymgmt) ?
+	    EVP_KEYMGMT_get0_provider(keymgmt) : NULL;
+	const char *provname = (prov) ? OSSL_PROVIDER_get0_name(prov) : NULL;
+	_Bool ret = (provname) ? 0 == strcmp("fips", provname) : 0;
+	EVP_KEYMGMT_free(keymgmt);
+	return ret;
 }
 
 const char *
 fips_getprovidername(const OSSL_PROVIDER *prov, const char *unknown)
 {
-	const char *name = (prov)? OSSL_PROVIDER_get0_name(prov) : NULL;
-	return (name)? name : unknown;
+	const char *name = (prov) ? OSSL_PROVIDER_get0_name(prov) : NULL;
+	return (name) ? name : unknown;
 }
 
 void
@@ -207,79 +229,84 @@ void
 	sshlog(file, func, line, showfunc, SYSLOG_LEVEL_DEBUG2, NULL,
 	    "%s object provider:%s name:%s", what,
 	    fips_getprovidername(prov, "-"),
-	    (name)? name : "-");
+	    (name) ? name : "-");
 }
 
 void
 fips_logprovider_EVP_CIPHER(const char *file, const char *func, int line,
-    int showfunc, EVP_CIPHER *cipher)
+    int showfunc, const EVP_CIPHER *cipher)
 {
 	(fips_logprovider)(file, func, line, showfunc, "EVP_CIPHER",
-	EVP_CIPHER_get0_provider(cipher),
-	EVP_CIPHER_get0_name(cipher));
+	    EVP_CIPHER_get0_provider(cipher),
+	    EVP_CIPHER_get0_name(cipher));
 }
 
 void
 fips_logprovider_EVP_CIPHER_CTX(const char *file, const char *func, int line,
-    int showfunc, EVP_CIPHER_CTX *cipher)
+    int showfunc, const EVP_CIPHER_CTX *ctx)
 {
+	const EVP_CIPHER *cipher = EVP_CIPHER_CTX_get0_cipher(ctx);
 	(fips_logprovider)(file, func, line, showfunc, "EVP_CIPHER_CTX",
-	EVP_CIPHER_get0_provider(EVP_CIPHER_CTX_get0_cipher(cipher)),
-	EVP_CIPHER_CTX_get0_name(cipher));
+	    (cipher) ? EVP_CIPHER_get0_provider(cipher) : NULL,
+	    (cipher) ? EVP_CIPHER_get0_name(cipher) : NULL);
 }
 
 void
 fips_logprovider_EVP_MD(const char *file, const char *func, int line,
-    int showfunc, EVP_MD *md)
+    int showfunc, const EVP_MD *md)
 {
 	(fips_logprovider)(file, func, line, showfunc, "EVP_MD",
-	EVP_MD_get0_provider(md),
-	EVP_MD_get0_name(md));
+	    EVP_MD_get0_provider(md),
+	    EVP_MD_get0_name(md));
 }
 
 void
 fips_logprovider_EVP_MD_CTX(const char *file, const char *func, int line,
-    int showfunc, EVP_MD_CTX *md)
+    int showfunc, const EVP_MD_CTX *ctx)
 {
+	const EVP_MD *md = EVP_MD_CTX_get0_md(ctx);
 	(fips_logprovider)(file, func, line, showfunc, "EVP_MD_CTX",
-	EVP_MD_get0_provider(EVP_MD_CTX_get0_md(md)),
-	EVP_MD_CTX_get0_name(md));
+	    (md) ? EVP_MD_get0_provider(md) : NULL,
+	    (md) ? EVP_MD_CTX_get0_name(ctx) : NULL);
 }
 
 void
 fips_logprovider_EVP_KDF(const char *file, const char *func, int line,
-    int showfunc, EVP_KDF *kdf)
+    int showfunc, const EVP_KDF *kdf)
 {
 	(fips_logprovider)(file, func, line, showfunc, "EVP_KDF",
-	EVP_KDF_get0_provider(kdf),
-	EVP_KDF_get0_name(kdf));
+	    EVP_KDF_get0_provider(kdf),
+	    EVP_KDF_get0_name(kdf));
 }
 
 void
 fips_logprovider_EVP_KDF_CTX(const char *file, const char *func, int line,
-    int showfunc, EVP_KDF_CTX *kdf)
+    int showfunc, const EVP_KDF_CTX *ctx)
 {
+	/* EVP_KDF_CTX_kdf accidentally declared to take non-const */
+	const EVP_KDF *kdf = EVP_KDF_CTX_kdf((EVP_KDF_CTX *)ctx);
 	(fips_logprovider)(file, func, line, showfunc, "EVP_KDF_CTX",
-	EVP_KDF_get0_provider(EVP_KDF_CTX_kdf(kdf)),
-	EVP_KDF_get0_name(EVP_KDF_CTX_kdf(kdf)));
+	    (kdf) ? EVP_KDF_get0_provider(kdf) : NULL,
+	    (kdf) ? EVP_KDF_get0_name(kdf) : NULL);
 }
 
 void
 fips_logprovider_EVP_PKEY(const char *file, const char *func, int line,
-    int showfunc, EVP_PKEY *pkey)
+    int showfunc, const EVP_PKEY *pkey)
 {
 	(fips_logprovider)(file, func, line, showfunc, "EVP_PKEY",
-	EVP_PKEY_get0_provider(pkey),
-	EVP_PKEY_get0_type_name(pkey));
+	    EVP_PKEY_get0_provider(pkey),
+	    EVP_PKEY_get0_type_name(pkey));
 }
 
 void
 fips_logprovider_EVP_PKEY_CTX(const char *file, const char *func, int line,
-    int showfunc, EVP_PKEY_CTX *pkey)
+    int showfunc, const EVP_PKEY_CTX *ctx)
 {
+	const EVP_PKEY *pkey = EVP_PKEY_CTX_get0_pkey((EVP_PKEY_CTX *)ctx);
 	(fips_logprovider)(file, func, line, showfunc, "EVP_PKEY_CTX",
-	EVP_PKEY_CTX_get0_provider(pkey),
-	fips_getpkeyctxname(pkey, NULL));
+	    EVP_PKEY_CTX_get0_provider(ctx),
+	    (pkey) ? EVP_PKEY_get0_type_name(pkey) : NULL);
 }
 
 #endif /* USE_OPENSSL_FIPS */

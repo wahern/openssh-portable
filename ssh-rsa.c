@@ -129,7 +129,20 @@ ssh_rsa_generate(struct sshkey *k, int bits)
 	    bits > SSHBUF_MAX_BIGNUM * 8)
 		return SSH_ERR_KEY_LENGTH;
 
+#ifdef USE_OPENSSL_FIPS
+	/*
+	 * Unbreak "FIPS-preferred" mode. See sshkey_pkey_digest_sign in
+	 * sshkey.c for further explanation.
+	 */
+	const char *props = NULL;
+	if (!FIPS_mode() && bits < 2048 && fips_canskipforkeytype("RSA")) {
+		verbose_f("skipping fips provider for %d-bit RSA key generation", bits);
+		props = "provider!=fips";
+	}
+	if ((ctx = EVP_PKEY_CTX_new_from_name(NULL, "RSA", props)) == NULL
+#else
 	if ((ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL)) == NULL
+#endif
 		|| (f4 = BN_new()) == NULL || !BN_set_word(f4, RSA_F4)) {
 		ret = SSH_ERR_ALLOC_FAIL;
 		goto out;

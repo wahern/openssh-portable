@@ -19,6 +19,7 @@
 #include <string.h>
 
 #ifdef USE_OPENSSL_FIPS
+#include <openssl/conf.h>
 #include <openssl/core_names.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
@@ -67,15 +68,30 @@ fips_initonce(void)
 		return;
 	initialized = 1;
 
-	/*
-	 * Try to detect and log configuration issues as early as possible.
-	 * Various API functions (including EVP_default_properties_*) will
-	 * trigger configuration loading, anyhow, but most callers outside
-	 * this module are likely to drop any error messages on the floor.
-	 */
-	if (!OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CONFIG, NULL)) {
+	OPENSSL_INIT_SETTINGS *settings = OPENSSL_INIT_new();
+	if (settings) {
+		if (!OPENSSL_INIT_set_config_appname(settings, "openssh_conf")) {
+			fips_error_fs("error setting config appname");
+		}
+		/*
+		 * Same default flags as OpenSSL (see DEFAULT_CONF_MFLAGS).
+		 * If appname is not found, CONF_MFLAGS_DEFAULT_SECTION
+		 * causes OpenSSL to load from the default, "openssl_conf".
+		 */
+		OPENSSL_INIT_set_config_file_flags(settings,
+		    CONF_MFLAGS_DEFAULT_SECTION |
+		    CONF_MFLAGS_IGNORE_MISSING_FILE |
+		    CONF_MFLAGS_IGNORE_RETURN_CODES);
+	} else {
+		fips_error_fs("error creating settings object");
+	}
+
+	if (!OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CONFIG, settings)) {
 		fips_error_fs("error loading OpenSSL configuration");
 	}
+
+	if (settings)
+		OPENSSL_INIT_free(settings);
 
 	OSSL_SELF_TEST_set_callback(NULL, &self_test_cb, NULL);
 

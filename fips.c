@@ -42,11 +42,11 @@ self_test_cb(const OSSL_PARAM params[], void *arg)
 		phase = (const char *)p->data;
 
 	p = OSSL_PARAM_locate_const(params, OSSL_PROV_PARAM_SELF_TEST_DESC);
-	if (p || p->data_type == OSSL_PARAM_UTF8_STRING)
+	if (p && p->data_type == OSSL_PARAM_UTF8_STRING)
 		desc = (const char *)p->data;
 
 	p = OSSL_PARAM_locate_const(params, OSSL_PROV_PARAM_SELF_TEST_TYPE);
-	if (p || p->data_type == OSSL_PARAM_UTF8_STRING)
+	if (p && p->data_type == OSSL_PARAM_UTF8_STRING)
 		type = (const char *)p->data;
 
 	if (strcmp(phase, OSSL_SELF_TEST_PHASE_PASS) == 0) {

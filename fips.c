@@ -68,6 +68,13 @@ fips_initonce(void)
 		return;
 	initialized = 1;
 
+	/*
+	 * Must set self-test callback before loading the config to catch
+	 * fips module checksum failures. NB: Callback is not invoked for a
+	 * missing module-mac definition (as opposed to mismatch).
+	 */
+	OSSL_SELF_TEST_set_callback(NULL, &self_test_cb, NULL);
+
 	OPENSSL_INIT_SETTINGS *settings = OPENSSL_INIT_new();
 	if (settings) {
 		if (!OPENSSL_INIT_set_config_appname(settings, "openssh_conf")) {
@@ -92,8 +99,6 @@ fips_initonce(void)
 
 	if (settings)
 		OPENSSL_INIT_free(settings);
-
-	OSSL_SELF_TEST_set_callback(NULL, &self_test_cb, NULL);
 
 	if (EVP_default_properties_is_fips_enabled(NULL)) {
 		fips_setenabled(1);

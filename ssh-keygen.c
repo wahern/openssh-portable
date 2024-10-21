@@ -3620,6 +3620,11 @@ main(int argc, char **argv)
 	argv += optind;
 	argc -= optind;
 
+#if USE_OPENSSL_FIPS
+	if (FIPS_mode())
+		debug("FIPS mode initialized");
+#endif
+
 	if (sign_op != NULL) {
 		if (strncmp(sign_op, "find-principals", 15) == 0) {
 			if (ca_key_path == NULL) {

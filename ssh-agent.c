@@ -2430,6 +2430,11 @@ main(int ac, char **av)
 
 skip:
 
+#if USE_OPENSSL_FIPS
+	if (FIPS_mode())
+		debug("FIPS mode initialized");
+#endif
+
 	cleanup_pid = getpid();
 
 #ifdef ENABLE_PKCS11

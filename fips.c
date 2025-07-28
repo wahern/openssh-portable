@@ -134,6 +134,9 @@ fips_initonce(void)
 	    !OSSL_PROVIDER_available(NULL, "base")) {
 		fips_error_fs("neither default nor base provider available");
 	}
+
+	if (!OSSL_PROVIDER_available(NULL, "fips"))
+		fips_error_fs("fips provider not available");
 }
 
 void
@@ -328,6 +331,31 @@ fips_logprovider_EVP_PKEY_CTX(const char *file, const char *func, int line,
 	(fips_logprovider)(file, func, line, showfunc, "EVP_PKEY_CTX",
 	    EVP_PKEY_CTX_get0_provider(ctx),
 	    (pkey) ? EVP_PKEY_get0_type_name(pkey) : NULL);
+}
+
+void
+fips_report(void)
+{
+	/*
+	 * Only report at verbose and higher (i.e. explicit -v or
+	 * equivalent) to avoid emitting unexpected log messages, which can
+	 * confuse existing automation scripts.
+	 *
+	 * Skip checks if not reporting to avoid unnecessarily calling
+	 * fips_isdefaultforkeytype, which creates and discards a KEYMGMT
+	 * object.
+	 */
+	if ((log_level_get() >= SYSLOG_LEVEL_VERBOSE)) {
+		const char *mode = "none";
+
+		if (FIPS_mode()) {
+			mode = "must";
+		} else if (fips_isdefaultforkeytype("RSA")) {
+			mode = "preferred";
+		}
+
+		verbose("FIPS mode: %s", mode);
+	}
 }
 
 #endif /* USE_OPENSSL_FIPS */

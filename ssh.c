@@ -1287,8 +1287,7 @@ main(int ac, char **av)
 #if USE_OPENSSL_FIPS
 	if (options.fips >= 0)
 		fips_setenabled(options.fips > 0);
-	if (FIPS_mode())
-		debug("FIPS mode initialized");
+	fips_report();
 #endif
 
 	/* Fill configuration defaults. */

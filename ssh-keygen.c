@@ -3621,8 +3621,7 @@ main(int argc, char **argv)
 	argc -= optind;
 
 #if USE_OPENSSL_FIPS
-	if (FIPS_mode())
-		debug("FIPS mode initialized");
+	fips_report();
 #endif
 
 	if (sign_op != NULL) {

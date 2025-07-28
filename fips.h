@@ -68,6 +68,8 @@ extern void fips_logprovider_UNKNOWN(void);
 void (fips_logprovider)(const char *, const char *, int, int,
     const char *, const OSSL_PROVIDER *, const char *);
 
+void fips_report(void);
+
 #else /* USE_OPENSSL_FIPS */
 
 #define FIPS_mode() 0

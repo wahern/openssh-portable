@@ -2431,8 +2431,7 @@ main(int ac, char **av)
 skip:
 
 #if USE_OPENSSL_FIPS
-	if (FIPS_mode())
-		debug("FIPS mode initialized");
+	fips_report();
 #endif
 
 	cleanup_pid = getpid();
